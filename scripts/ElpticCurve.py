@@ -15,94 +15,70 @@ class ElipticCurve:
         assert(IsTheElipticCurveSmooth(A,B)),"Curve is not Smooth"
 
 
-        self.order = self._compute_group_order_naive(A,B,self.prime_modulus) if self.prime_modulus!=1 else None 
+    #     self.order = self._compute_group_order_naive(A,B,self.prime_modulus) if self.prime_modulus!=1 else None 
 
 
     def __repr__(self):
-        return f"y^2=x^3+{self.A}*x+{self.B}"
+        return f"y^2=x^3+[{self.A}]*x+[{self.B}]"
     
 
-    def is_on_curve(self, P, epsilon=10e-10) -> bool:
+    def is_on_curve(self, P) -> bool:
         if P.is_infinity():
             return True
         x, y = P.x, P.y
-        return ((y * y) - (x **3 + self.A * x + self.B))**2<epsilon
+        return ((y * y) == (x **3 + self.A * x + self.B))
 
     def inf(self):
         return ElipticCurvePoint( None, None,self)
 
-    def getPoint(self,x):
-        return (ElipticCurvePoint(x,(x**3+self.A*x+self.B)**0.5,self),
-                ElipticCurvePoint(x,-(x**3+self.A*x+self.B)**0.5,self))
+    # def getPoint(self,x):
+    #     return (ElipticCurvePoint(x,(x**3+self.A*x+self.B)**0.5,self),
+    #             ElipticCurvePoint(x,-(x**3+self.A*x+self.B)**0.5,self))
     
 
     def __eq__(self, another_curve):
-        return self.A==another_curve.A and self.B==another_curve.B and self.prime_modulus==another_curve.prime_modulus
+        return self.A==another_curve.A and self.B==another_curve.B 
 
-
-    @staticmethod
-    def _compute_group_order_naive(A, B, p): #TODO: more effiicient way?
-        """
-        Computes the order |G| of the elliptic curve y^2 = x^3 + Ax + B (mod p)
-        using the naive counting algorithm.
-        
-        Note: This is only efficient for relatively small primes (e.g., p < 10^5).
-        """
-        # Start with 1 to account for the Point at Infinity (O)
-        order = 1 
-        
-        # Iterate x from 0 to p - 1
-        for x in range(p):
-            # Calculate z = x^3 + Ax + B (mod p)
-            z = (pow(x, 3, p) + A * x + B) % p
-            
-            if z == 0:
-                # If z == 0, then y^2 = 0, which means y = 0. 
-                # There is exactly one point: (x, 0)
-                order += 1
-            else:
-                # Calculate the Legendre symbol using Euler's criterion: z^((p-1)/2) mod p
-                legendre = pow(z, (p - 1) // 2, p)
-                
-                if legendre == 1:
-                    # z is a quadratic residue. There are two solutions for y: (x, y) and (x, -y)
-                    order += 2
-                # If legendre == p - 1 (which acts as -1 mod p), there are no solutions for this x.
-                
-        return order
 
 
 class ElipticCurvePoint:
-    def __init__(self,x,y,curve : ElipticCurve):
+    def __init__(self,x: F_p,y: F_p,curve : ElipticCurve):
         self.x=x
         self.y=y
         self.curve=curve
-        self.p=curve.prime_modulus
+        # self.p=curve.prime_modulus #TODO
         if x is not None and y is not None:
-            assert(curve.is_on_curve(self)),("Point is not on the Curve")
+            assert isinstance(x,F_p) and isinstance(y,F_p) , "Points must be defined over a field"
+            assert x.prime_modulus==y.prime_modulus , "x,y must be defined over the same field"
+            # assert(curve.is_on_curve(self)),("Point is not on the Curve") #TODO
+
 
     def is_infinity(self) -> bool:
-        return self.x is None and self.y is None
+        return self.x is None or self.y is None
 
     def copy(self):
         return self.__class__(self.x,self.y,self.curve)
 
     def inv(self):
         if self.is_infinity() : return self
-        return self.__class__(self.x,-self.y % self.p,self.curve)
+        return self.__class__(self.x,-self.y,self.curve)
 
 
     def __add__(self,Q):
+        assert isinstance(Q,self.__class__) , "Addition is suported over two points only"
         if Q.is_infinity():
             return self
         if self.is_infinity():
             return Q
         
+        assert Q.x.prime_modulus==self.x.prime_modulus , "P,Q must be defined over the same field"
+
+
         x1, y1 = self.x, self.y
         x2, y2 = Q.x, Q.y
 
         #case 1
-        if x1 != x2 and y1 != y2:
+        if x1 != x2 :
             lam = (y2 - y1) / (x2 - x1)
 
         #case 2
@@ -121,6 +97,7 @@ class ElipticCurvePoint:
 
 
     def __mul__(self, k: int) :
+        assert isinstance(k,int), "multiplication is supported over an integer only"
         if k < 0:
             if k==-1 : return self.inv()
             k*=-1
@@ -134,11 +111,11 @@ class ElipticCurvePoint:
         return summand
 
 
-    def __rmul__(self, k: int) :
+    def __rmul__(self, k: int) : #TODO: make sure to check where multiplication is supported from left and from right
         return self.__mul__(k)
 
-    def __eq__(self, Q,epsilon=10e10):
-        return (self.x-Q.x)<epsilon and (self.y-Q.y)<epsilon and self.curve==Q.curve
+    def __eq__(self, Q):
+        return (self.x==Q.x) and (self.y==Q.y) and self.curve==Q.curve
 
 
 
@@ -168,11 +145,13 @@ class ElipticCurvePoint:
     def __repr__(self) -> str:
         if self.is_infinity():
             return "O"
-        return f"({self.x}, {self.y})"
+        return f"({self.x._value}, {self.y._value}) mod {self.x.prime_modulus}"
         
+mod=5
+curve=ElipticCurve(F_p(1,mod),F_p(1,mod))
+P=ElipticCurvePoint(F_p(0,mod),F_p(1,mod),curve)
+Q=ElipticCurvePoint(F_p(2,mod),F_p(1,mod),curve)
 
-a=ElipticCurve(F_p(5,1),F_p(5,1))
-P=a.getPoint(5)[0]
-Q=a.getPoint(1)[0]
-print(P+P)
+# Q=a.getPoint(1)[0]
+print(P+Q)
 b=5
