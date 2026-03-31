@@ -188,6 +188,8 @@ class PolyF_p:
             v0=list(values.values())[0]
             for power,scalar in values.items() : assert v0.prime_modulus==scalar.prime_modulus , "scalars must be over the same field"
     
+        self.as_dict=self.sort_dict_by_keys(self.as_dict)
+
     def copy(self):
         return self.__class__(self.as_dict)
 
@@ -244,6 +246,14 @@ class PolyF_p:
             return self.__class__(temp)
         else : raise ValueError(f"type {type(poly) } unsuported for add with polyF_p")
 
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __rsub__(self, other):
+        return self.__sub__(other)
+
+    def __radd__(self, other):
+        return self.__add__(other)
 
 
     def __mul__(self,poly):
@@ -267,7 +277,7 @@ class PolyF_p:
             """
             Performs Euclidean division. Returns (Quotient, Remainder).
             """
-            if not isinstance(poly, self.__class__):
+            if not (isinstance(poly, self.__class__)):
                 raise ValueError(f"type {type(poly)} unsupported for divmod with PolyF_p")
             
             if not poly.as_dict:
@@ -328,70 +338,26 @@ class PolyF_p:
     def inv():
         raise Exception("A general polynomial does not have an inverese, iverse is supported over quetients only")
 
-    # def mod_inverse(self, mod_poly):
-    #         """
-    #         Calculates the multiplicative inverse of this polynomial modulo mod_poly
-    #         using the Extended Euclidean Algorithm.
-    #         """
-    #         if not isinstance(mod_poly, self.__class__):
-    #             raise ValueError(f"type {type(mod_poly)} unsupported for mod_inverse")
-                
-    #         if not mod_poly.as_dict:
-    #             raise ValueError("Cannot modulo by the zero polynomial.")
-    #         if not self.as_dict:
-    #             raise ValueError("The zero polynomial has no inverse.")
-                
-    #         # Get a sample scalar to extract the prime field modulus and class type
-    #         sample_scalar = list(mod_poly.as_dict.values())[0]
-    #         p = sample_scalar.prime_modulus
-    #         F_p_class = sample_scalar.__class__
-            
-    #         # Define the '0' and '1' polynomials for our base cases
-    #         zero = self.__class__({})
-    #         one = self.__class__({0: F_p_class(1, p)})
-            
-    #         # Setup variables for the Extended Euclidean Algorithm
-    #         # r0 and r1 track the remainders (GCD calculation)
-    #         # t0 and t1 track the Bézout coefficients (the inverse)
-    #         r0 = mod_poly
-    #         r1 = self
-    #         t0 = zero
-    #         t1 = one
-            
-    #         # Loop while the remainder polynomial is not zero
-    #         while r1.as_dict:
-    #             # Get quotient and remainder
-    #             q, r_temp = divmod(r0, r1)
-                
-    #             # Shift the remainders
-    #             r0 = r1
-    #             r1 = r_temp
-                
-    #             # Shift the Bézout coefficients: t_new = t0 - q * t1
-    #             t_temp = t0 - (q * t1)
-    #             t0 = t1
-    #             t1 = t_temp
-                
-    #         # r0 now holds the Greatest Common Divisor (GCD)
-    #         deg_gcd = max(r0.as_dict.keys()) if r0.as_dict else -1
-            
-    #         # If the degree of the GCD is > 0, they share a polynomial factor.
-    #         # This means they are not coprime, so no inverse exists.
-    #         if deg_gcd > 0 or deg_gcd == -1:
-    #             raise ValueError("Polynomials are not coprime; no inverse exists.")
-                
-    #         # The GCD is a scalar (e.g., 5). We must multiply our result by 
-    #         # the inverse of this scalar to normalize the equation to 1.
-    #         gcd_scalar = r0.as_dict[0]
-            
-    #         # Calculate the modular inverse of the scalar (uses F_p.__pow__)
-    #         gcd_scalar_inv = gcd_scalar ** -1 
-            
-    #         # Create a 0-degree polynomial from the scalar inverse
-    #         inv_poly = self.__class__({0: gcd_scalar_inv})
-            
-    #         # Return the normalized coefficient
-    #         return t0 * inv_poly
+
+    def __eq__(self, poly):
+        if not isinstance(poly,self.__class__):  
+            return False
+        for ii,(power,scalar) in enumerate(self.as_dict.items()):
+            if (power!=list(poly.as_dict.items())[ii][0] 
+                or scalar!=list(poly.as_dict.items())[ii][1]):
+                return False
+        return True
+
+
+    @staticmethod
+    def sort_dict_by_keys(input_dict):
+        """
+        Takes a dictionary with integer keys and values, and returns 
+        a new dictionary ordered from the minimum key to the maximum key.
+        """
+        # sorted() automatically sorts the items based on the keys (the first element)
+        return dict(sorted(input_dict.items()))    
+
 
     def __repr__(self):
 
@@ -408,16 +374,180 @@ class PolyF_p:
 
 class PolyF_nQuotient(PolyF_p):
     def __init__(self, values, quotient_poly):
-        super().__init__(values)
+        if isinstance(values,dict):
+            self.poly=PolyF_p(values)
+        elif isinstance(values,PolyF_p): self.poly=values
+        else : raise ValueError("unsoported input for PolyF_nQuotient")
+        if isinstance(quotient_poly,dict):
+            self.quotient_poly=PolyF_p(quotient_poly)
+        elif isinstance(quotient_poly,PolyF_p): self.quotient_poly=quotient_poly
+        else : raise ValueError("unsoported input for PolyF_nQuotient")
+
+        self.poly=self.poly % self.quotient_poly
 
         #FIXME : defince all operations 
+        
+    # def apply_quotient(self): 
+    #     return self.__class__(PolyF_p(self.as_dict) % self.quotient_poly,self.quotient_poly)
+
+
+
+    def __mul__(self,poly):
+        if isinstance(poly,self.__class__):
+            assert poly.quotient_poly==self.quotient_poly , "cannot perform muliplication by different rings"
+            res=(self.poly*poly.poly) % self.quotient_poly
+            return self.__class__(res,self.quotient_poly)
+        if isinstance(poly,PolyF_p):
+            res=(self.poly*poly) % self.quotient_poly
+            return self.__class__(res,self.quotient_poly)
+        else : raise ValueError("unsoported input for mul with PolyF_nQuotient")
+
+    def __add__(self,poly):
+        if isinstance(poly,self.__class__):
+            assert poly.quotient_poly==self.quotient_poly , "cannot perform addition by different rings"
+            res=(self.poly+poly.poly) % self.quotient_poly
+            return self.__class__(res,self.quotient_poly)
+        if isinstance(poly,PolyF_p):
+            res=(self.poly+poly) % self.quotient_poly
+            return self.__class__(res,self.quotient_poly)
+        else : raise ValueError("unsoported input for add with PolyF_nQuotient")
+
+    def __sub__(self,poly):
+        if isinstance(poly,self.__class__):
+            assert poly.quotient_poly==self.quotient_poly , "cannot perform sub by different rings"
+            res=(self.poly-poly.poly) % self.quotient_poly
+            return self.__class__(res,self.quotient_poly)
+        if isinstance(poly,PolyF_p):
+            res=(self.poly-poly) % self.quotient_poly
+            return self.__class__(res,self.quotient_poly)
+        else : raise ValueError("unsoported input for sub with PolyF_nQuotient")
+
+
+    def inv(self):
+            """
+            Calculates the multiplicative inverse of this polynomial modulo mod_poly
+            using the Extended Euclidean Algorithm.
+            """
+            mod_poly=self.quotient_poly
+                
+            if not mod_poly.as_dict:
+                raise ValueError("Cannot modulo by the zero polynomial.")
+            if not self.poly.as_dict:
+                raise ValueError("The zero polynomial has no inverse.")
+                
+            # Get a sample scalar to extract the prime field modulus and class type
+            sample_scalar = list(mod_poly.as_dict.values())[0]
+            p = sample_scalar.prime_modulus
+            
+            # Define the '0' and '1' polynomials for our base cases
+            zero = self.poly.__class__({})
+            one = self.poly.__class__({0: F_p(1, p)})
+            
+            # Setup variables for the Extended Euclidean Algorithm
+            # r0 and r1 track the remainders (GCD calculation)
+            # t0 and t1 track the Bézout coefficients (the inverse)
+            r0 = mod_poly
+            r1 = self.poly
+            t0 = zero
+            t1 = one
+            
+            # Loop while the remainder polynomial is not zero
+            while r1.as_dict:
+                # Get quotient and remainder
+                q, r_temp = divmod(r0, r1)
+                
+                # Shift the remainders
+                r0 = r1
+                r1 = r_temp
+                
+                # Shift the Bézout coefficients: t_new = t0 - q * t1
+                t_temp = t0 - (q * t1)
+                t0 = t1
+                t1 = t_temp
+                
+            # r0 now holds the Greatest Common Divisor (GCD)
+            deg_gcd = max(r0.as_dict.keys()) if r0.as_dict else -1
+            
+            # If the degree of the GCD is > 0, they share a polynomial factor.
+            # This means they are not coprime, so no inverse exists.
+            if deg_gcd > 0 or deg_gcd == -1:
+                raise ValueError("Polynomials are not coprime; no inverse exists.")
+                
+            # The GCD is a scalar (e.g., 5). We must multiply our result by 
+            # the inverse of this scalar to normalize the equation to 1.
+            gcd_scalar = r0.as_dict[0]
+            
+            # Calculate the modular inverse of the scalar (uses F_p.__pow__)
+            gcd_scalar_inv = gcd_scalar ** -1 
+            
+            # Create a 0-degree polynomial from the scalar inverse
+            inv_poly = self.poly.__class__({0: gcd_scalar_inv})
+            
+            # Return the normalized coefficient
+            return t0 * inv_poly
+
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
+    def __rsub__(self, other):
+        return self.__sub__(other)
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+
+    def copy(self):
+        return self.__class__(self.poly,self.quotient_poly)
+
+    def __pow__(self,number):
+        if number==0 : return self.__class__({},self.quotient_poly)
+        if isinstance(number,int):
+            if number < 0:  temp=self.copy().inv()
+            else :          temp=self.copy()
+            for i in range(number-1):
+                temp=temp*self.copy()
+            return temp
+        else : raise ValueError(f"type {type(number) } unsuported for pow with PolyF_nQuotient")
+
+
+    def __repr__(self):
+        return f"{self.poly.__repr__()} % {self.quotient_poly.__repr__()}"
+
+
+
 
 
 A=F_p(3,7)
-B=F_p(3,5)
+B=F_p(6,7)
 C=PolyF_p({0: A , 2: A})
 D=PolyF_p({0: A , 3: A})
 
-print(C**2)
+E=PolyF_nQuotient({1: A , 2: B,3: A}, PolyF_p({3: A , 2: B}))
+F=PolyF_nQuotient({2: A , 2: B,3: A}, PolyF_p({3: A , 2: B}))
+
+
+
+# 1. Define the base field objects
+p = 7
+A1 = F_p(1, p)
+A2 = F_p(2, p)
+A4 = F_p(4, p)
+A6 = F_p(6, p)
+
+# 2. Define the polynomials using your dictionary structure
+# M(x) = x^2 + 1
+quotient_dict = {0: A1, 2: A1}
+M = PolyF_p(quotient_dict)
+
+# P(x) = x + 2
+poly_dict = {0: A2, 1: A1}
+P = PolyF_p(poly_dict)
+
+# 3. Create the Quotient Ring Object
+# P_ring represents (x + 2) mod (x^2 + 1)
+P_ring = PolyF_nQuotient(P, M)
+
+print(E*F)
 
 a=5
